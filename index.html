@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bio-Synth Mobile</title>
+    <title>Bio-Synth : Final Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background-color: #020205; overflow: hidden; font-family: sans-serif; }
@@ -13,28 +13,28 @@
             font-weight: bold; opacity: 0; transition: opacity 0.5s; pointer-events: none;
             z-index: 100;
         }
-        .ui-label {
-            position: absolute; top: 20px; width: 100%; text-align: center;
-            color: #00f2ff; font-size: 0.7rem; letter-spacing: 3px; opacity: 0.6;
-        }
     </style>
 </head>
 <body>
-    <div class="ui-label">PROTOCOLE BIO-SYNTH v1.0</div>
-    <div id="msg">CONNEXION ÉTABLIE</div>
+    <div id="msg">SÉQUENCE VALIDÉE</div>
     <script>
-        // Tailles adaptées mobile
         const HEX_SIZE = 34; 
         const COLORS = [null, 0x00f2ff, 0xff00ff, 0x00ff00, 0xffff00, 0xff0000];
         const W_DIST = HEX_SIZE * Math.sqrt(3);
         const H_DIST = HEX_SIZE * 1.5;
         const DIRS = [{q: 1, r: 0}, {q: 0, r: 1}, {q: -1, r: 1}, {q: -1, r: 0}, {q: 0, r: -1}, {q: 1, r: -1}];
 
+        // NIVEAU MANUEL (9 pièces au total : 4 fixes, 5 mobiles)
         const LEVEL_DATA = [
-            [1, 2, 3, 4, 5, 1], // Centre
-            [2, 3, 1, 1, 5, 2], [1, 5, 2, 2, 4, 3], // Branche 1
-            [3, 1, 2, 4, 4, 1], [4, 2, 5, 1, 3, 2], [1, 2, 3, 5, 1, 4], // Branche 2
-            [5, 4, 3, 2, 1, 4], [2, 1, 5, 4, 3, 2], [3, 1, 4, 1, 2, 5]  // Branche 3
+            [1, 2, 3, 4, 5, 1], // 0: Centre (Fixe)
+            [1, 5, 2, 2, 4, 3], // 1: Mobile 
+            [2, 3, 4, 1, 5, 2], // 2: Terminal Sud (Fixe)
+            [4, 3, 2, 1, 5, 4], // 3: Mobile 
+            [1, 2, 4, 3, 5, 1], // 4: Mobile 
+            [1, 4, 5, 3, 4, 2], // 5: Terminal Ouest (Fixe)
+            [4, 2, 5, 1, 3, 2], // 6: Mobile 
+            [3, 1, 4, 1, 2, 5], // 7: Mobile 
+            [2, 1, 3, 5, 2, 4]  // 8: Terminal Nord-Est (Fixe)
         ];
 
         const config = {
@@ -51,15 +51,17 @@
 
         function create() {
             const cx = this.cameras.main.centerX;
-            const cy = this.cameras.main.centerY - 50; // Remonté pour laisser la place au dock
+            const cy = this.cameras.main.centerY - 40;
 
-            // Layout optimisé pour format Portrait (Vertical)
             const layout = [
                 {q: 0, r: 0, f: true},    
                 {q: 0, r: 1, f: false}, {q: 0, r: 2, f: true},    
                 {q: -1, r: 0, f: false}, {q: -2, r: 0, f: false}, {q: -3, r: 0, f: true},   
                 {q: 1, r: -1, f: false}, {q: 2, r: -2, f: false}, {q: 3, r: -3, f: true}   
             ];
+
+            // On sépare les mobiles pour l'inventaire
+            let mobileCount = 0;
 
             layout.forEach((pos, i) => {
                 const px = cx + W_DIST * (pos.q + pos.r/2);
@@ -70,20 +72,23 @@
                     p.q = pos.q; p.r = pos.r;
                     pieces.push(p);
                 } else {
+                    // Création du slot
                     const s = this.add.graphics({x: px, y: py});
                     s.lineStyle(1, 0x00f2ff, 0.2).strokePoints(getHexPts(HEX_SIZE), true);
                     slots.push({x: px, y: py, q: pos.q, r: pos.r, occupied: false});
 
-                    // Dock en bas de l'écran (Inventaire)
-                    const dockX = 50 + ((i-1) * (window.innerWidth / 5.5));
-                    const dockY = window.innerHeight - 80;
+                    // Calcul position inventaire (5 pièces réparties sur la largeur)
+                    // On utilise mobileCount pour l'espacement
+                    const ix = (window.innerWidth / 6) * (mobileCount + 1);
+                    const iy = window.innerHeight - 80;
                     
                     let edges = [...LEVEL_DATA[i]];
-                    const initialRot = i % 6; 
-                    for(let r=0; r<initialRot; r++) edges.unshift(edges.pop());
+                    const randRot = Math.floor(Math.random() * 6);
+                    for(let r=0; r<randRot; r++) edges.unshift(edges.pop());
                     
-                    const p = createPiece(this, dockX, dockY, edges, false);
+                    const p = createPiece(this, ix, iy, edges, false);
                     pieces.push(p);
+                    mobileCount++;
                 }
             });
             
@@ -105,9 +110,6 @@
                         found = true;
                     }
                 });
-                if (!found) { // Retour au dock si non placé
-                    this.tweens.add({ targets: obj, x: obj.getData('originX'), y: obj.getData('originY'), duration: 200 });
-                }
                 refresh(this);
             });
         }
@@ -115,8 +117,6 @@
         function createPiece(scene, x, y, edges, isFixed) {
             const container = scene.add.container(x, y);
             container.setData('edges', edges);
-            container.setData('originX', x);
-            container.setData('originY', y);
             container.isFixed = isFixed;
             container.hasMoved = false;
             const gfx = scene.add.graphics();
@@ -125,13 +125,11 @@
             drawPiece(container, "normal");
 
             if (!isFixed) {
-                // Zone interactive agrandie pour le doigt
-                const hitPoly = new Phaser.Geom.Polygon(getHexPts(HEX_SIZE + 10));
-                container.setInteractive(hitPoly, Phaser.Geom.Polygon.Contains);
+                container.setInteractive(new Phaser.Geom.Polygon(getHexPts(HEX_SIZE + 10)), Phaser.Geom.Polygon.Contains);
                 scene.input.setDraggable(container);
-                container.on('pointerdown', () => { container.hasMoved = false; container.setScale(1.1); });
+                container.on('pointerdown', () => { container.hasMoved = false; container.depth = 10; });
                 container.on('pointerup', () => {
-                    container.setScale(1.0);
+                    container.depth = 1;
                     if (!container.hasMoved) {
                         let ed = container.getData('edges');
                         ed.unshift(ed.pop());
@@ -161,7 +159,9 @@
             });
 
             pieces.filter(p => p.q === null).forEach(p => drawPiece(p, "normal"));
-            document.getElementById('msg').style.opacity = (placed.length === pieces.length && errors === 0) ? 1 : 0;
+            
+            const allPlaced = pieces.every(p => p.q !== null);
+            document.getElementById('msg').style.opacity = (allPlaced && errors === 0) ? 1 : 0;
         }
 
         function drawPiece(c, status) {
