@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bio-Synth : Precision Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; background-color: #020205; overflow: hidden; font-family: 'Courier New', monospace; }
+        #game-ui { position: absolute; bottom: 20px; width: 100%; display: flex; flex-direction: column; align-items: center; z-index: 100; pointer-events: none;}
+        button { background: #001a1d; border: 2px solid #00f2ff; color: #00f2ff; padding: 12px 24px; cursor: pointer; pointer-events: auto; font-weight: bold; margin-top: 10px; box-shadow: 0 0 10px rgba(0,242,255,0.3); }
+        #msg { color: #00ff00; font-size: 1.5rem; text-shadow: 0 0 15px #00ff00; font-weight: bold; opacity: 0; transition: opacity 0.5s; }
+    </style>
+</head>
+<body>
+    <div id="game-ui">
+        <div id="msg">RÉSEAU ÉTABLI</div>
+        <button onclick="window.location.reload()">GÉNÉRER NOUVEAU RÉSEAU</button>
+    </div>
+    <script>
+        const HEX_SIZE = 42;
+        const COLORS = [null, 0x00f2ff, 0xff00ff, 0x00ff00, 0xffff00, 0xff0000];
+        const W_DIST = HEX_SIZE * Math.sqrt(3);
+        const H_DIST = HEX_SIZE * 1.5;
+        const DIRS = [{q: 1, r: 0}, {q: 0, r: 1}, {q: -1, r: 1}, {q: -1, r: 0}, {q: 0, r: -1}, {q: 1, r: -1}];
+
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: '#050508',
+            scene: { create: create }
+        };
+
+        const game = new Phaser.Game(config);
+        let pieces = [];
+        let slots = [];
+        let msgElement;
+
+        function create() {
+            msgElement = document.getElementById('msg');
+            const cx = this.cameras.main.centerX;
+            const cy = this.cameras.main.centerY;
+
+            const layout = [
+                {q: 0, r: 0, f: true},    
+                {q: 1, r: 0, f: false}, {q: 2, r: 0, f: true},    
+                {q: -1, r: 1, f: false}, {q: -2, r: 2, f: false}, {q: -2, r: 3, f: true},   
+                {q: 0, r: -1, f: false}, {q: -1, r: -1, f: false}, {q: -2, r: -1, f: true}   
+            ];
+
+            const solutionData = generateSolution(layout);
+
+            layout.forEach((pos, i) => {
+                const px = cx + W_DIST * (pos.q + pos.r/2);
+                const py = cy + H_DIST * pos.r;
+                
+                if (pos.f) {
+                    const p = createPiece(this, px, py, solutionData[i], true);
+                    p.q = pos.q; p.r = pos.r;
+                    pieces.push(p);
+                } else {
+                    const s = this.add.graphics({x: px, y: py});
+                    s.lineStyle(2, 0x00f2ff, 0.1).strokePoints(getHexPts(HEX_SIZE), true);
+                    slots.push({x: px, y: py, q: pos.q, r: pos.r, occupied: false});
+
+                    const ix = (i % 2 === 0) ? 100 : window.innerWidth - 100;
+                    const iy = 150 + (i * 60) % (window.innerHeight - 300);
+                    
+                    let edges = [...solutionData[i]];
+                    const randRot = Math.floor(Math.random()*6);
+                    for(let r=0; r<randRot; r++) edges.unshift(edges.pop());
+                    
+                    const p = createPiece(this, ix, iy, edges, false);
+                    pieces.push(p);
+                }
+            });
+            
+            refresh(this);
+
+            // GESTION DU MOUVEMENT (DRAG)
+            this.input.on('drag', (pointer, obj, dx, dy) => {
+                obj.setPosition(dx, dy);
+                obj.hasMoved = true; // On marque que la pièce a bougé
+                if (obj.currentSlot) { 
+                    obj.currentSlot.occupied = false; 
+                    obj.currentSlot = null; 
+                    obj.q = null; 
+                    obj.r = null; 
+                }
+                refresh(this);
+            });
+
+            this.input.on('dragend', (pointer, obj) => {
+                let found = false;
+                slots.forEach(s => {
+                    if (!s.occupied && Phaser.Math.Distance.Between(obj.x, obj.y, s.x, s.y) < 35) {
+                        obj.setPosition(s.x, s.y);
+                        obj.q = s.q; obj.r = s.r;
+                        obj.currentSlot = s;
+                        s.occupied = true;
+                        found = true;
+                    }
+                });
+                if (!found) { obj.q = null; obj.r = null; }
+                refresh(this);
+            });
+        }
+
+        function createPiece(scene, x, y, edges, isFixed) {
+            const container = scene.add.container(x, y);
+            container.setData('edges', edges);
+            container.isFixed = isFixed;
+            container.hasMoved = false; // Initialisation du flag de mouvement
+            const gfx = scene.add.graphics();
+            container.add(gfx);
+
+            drawPiece(container, "normal");
+
+            if (!isFixed) {
+                container.setInteractive(new Phaser.Geom.Polygon(getHexPts(HEX_SIZE)), Phaser.Geom.Polygon.Contains);
+                scene.input.setDraggable(container);
+
+                // GESTION DE LA ROTATION (CLIC SEUL)
+                container.on('pointerdown', () => {
+                    container.hasMoved = false; // Reset au début du clic
+                });
+
+                container.on('pointerup', (pointer) => {
+                    // Si la pièce n'a pas été déplacée, on tourne
+                    if (!container.hasMoved) {
+                        let ed = container.getData('edges');
+                        ed.unshift(ed.pop());
+                        container.setData('edges', ed);
+                        refresh(scene);
+                    }
+                });
+            }
+            return container;
+        }
+
+        function refresh(scene) {
+            const placed = pieces.filter(p => p.q !== null);
+            let errors = 0;
+
+            placed.forEach(p1 => {
+                let hasErr = false;
+                let connections = 0;
+
+                DIRS.forEach((dir, i) => {
+                    const p2 = placed.find(p => p.q === p1.q + dir.q && p.r === p1.r + dir.r);
+                    if (p2) {
+                        connections++;
+                        if (p1.getData('edges')[i] !== p2.getData('edges')[(i+3)%6]) {
+                            hasErr = true;
+                            errors++;
+                        }
+                    }
+                });
+
+                const status = (connections > 0) ? (hasErr ? "error" : "success") : "normal";
+                drawPiece(p1, status);
+            });
+
+            pieces.filter(p => p.q === null).forEach(p => drawPiece(p, "normal"));
+
+            if (placed.length === pieces.length && errors === 0) {
+                msgElement.style.opacity = 1;
+            } else {
+                msgElement.style.opacity = 0;
+            }
+        }
+
+        function drawPiece(c, status) {
+            const g = c.list[0];
+            const edges = c.getData('edges');
+            let mainCol = (status === "error") ? 0xff0000 : (status === "success") ? 0x00ff00 : (c.isFixed ? 0xffffff : 0x00f2ff);
+            
+            g.clear();
+            g.lineStyle(c.isFixed ? 5 : 2, mainCol, 1);
+            g.fillStyle(c.isFixed ? 0x1a1a2e : 0x0f0f1b, 1);
+            
+            const pts = getHexPts(HEX_SIZE);
+            g.beginPath(); g.moveTo(pts[0].x, pts[0].y);
+            pts.forEach(p => g.lineTo(p.x, p.y));
+            g.closePath(); g.fillPath(); g.strokePath();
+
+            edges.forEach((type, i) => {
+                const angle = (Math.PI / 3 * i); 
+                const d = HEX_SIZE * 0.82;
+                g.fillStyle(COLORS[type], 1);
+                g.fillCircle(Math.cos(angle)*d, Math.sin(angle)*d, 7);
+                g.lineStyle(1.5, 0xffffff, 0.7);
+                g.strokeCircle(Math.cos(angle)*d, Math.sin(angle)*d, 7);
+            });
+        }
+
+        function generateSolution(layout) {
+            let data = layout.map(() => [0,0,0,0,0,0]);
+            layout.forEach((p1, i) => {
+                DIRS.forEach((dir, d) => {
+                    if (data[i][d] !== 0) return;
+                    const ni = layout.findIndex(p => p.q === p1.q + dir.q && p.r === p1.r + dir.r);
+                    const color = Math.floor(Math.random() * 5) + 1;
+                    data[i][d] = color;
+                    if (ni !== -1) data[ni][(d+3)%6] = color;
+                });
+            });
+            data.forEach(p => { for(let i=0; i<6; i++) if(p[i]===0) p[i]=Math.floor(Math.random()*5)+1; });
+            return data;
+        }
+
+        function getHexPts(s) {
+            let p = [];
+            for (let i = 0; i < 6; i++) {
+                let a = (Math.PI / 3 * i);
+                p.push({ x: s * Math.cos(a + Math.PI/6), y: s * Math.sin(a + Math.PI/6) });
+            }
+            return p;
+        }
+    </script>
+</body>
+</html>
