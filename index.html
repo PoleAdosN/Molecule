@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bio-Synth : Final Protocol</title>
+    <title>Bio-Synth : Mobile Optimized</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background-color: #020205; overflow: hidden; font-family: 'Courier New', monospace; }
+        
         #ui-layer { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; 
             justify-content: center; pointer-events: none; z-index: 100;
         }
+
+        /* Centrage horizontal forcé du message de victoire */
         #msg { 
-            color: #00ff00; font-size: 1.8rem; text-shadow: 0 0 15px #00ff00; 
+            color: #00ff00; font-size: 1.6rem; text-shadow: 0 0 15px #00ff00; 
             font-weight: bold; display: none; margin-bottom: 20px;
-            background: rgba(0, 255, 0, 0.1); padding: 15px 30px;
-            border: 2px solid #00ff00; border-radius: 8px;
-            text-transform: uppercase; letter-spacing: 3px;
+            background: rgba(0, 255, 0, 0.15); padding: 20px;
+            border: 3px solid #00ff00; border-radius: 12px;
+            text-transform: uppercase; letter-spacing: 2px;
+            text-align: center; width: 80%; max-width: 400px;
+            pointer-events: none;
         }
+
         #formula-display {
             display: none; text-align: center;
             color: #00f2ff; text-shadow: 0 0 20px #00f2ff;
+            width: 100%;
         }
-        .molecule { font-size: 3.5rem; font-weight: bold; letter-spacing: 5px; }
-        .sub { vertical-align: sub; font-size: 1.5rem; }
+        .molecule { font-size: 3rem; font-weight: bold; letter-spacing: 4px; }
+        .sub { vertical-align: sub; font-size: 1.2rem; }
     </style>
 </head>
 <body>
@@ -33,12 +40,13 @@
         <div id="formula-display">
             <h2>MOLÉCULE SYNTHÉTISÉE :</h2>
             <div class="molecule">C<span class="sub">8</span>H<span class="sub">10</span>N<span class="sub">4</span>O<span class="sub">2</span></div>
-            <p style="font-size: 0.8rem; margin-top: 20px; color: #fff;">[ STABILITÉ : 100% ]</p>
+            <p style="font-size: 0.9rem; margin-top: 20px; color: #fff; opacity: 0.8;">[ STABILITÉ : 100% ]</p>
         </div>
     </div>
 
     <script>
-        const HEX_SIZE = 34; 
+        // Taille légèrement augmentée pour mobile
+        const HEX_SIZE = 36; 
         const COLORS = [null, 0x00f2ff, 0xff00ff, 0x00ff00, 0xffff00, 0xff0000];
         const W_DIST = HEX_SIZE * Math.sqrt(3);
         const H_DIST = HEX_SIZE * 1.5;
@@ -67,7 +75,6 @@
             const cx = this.cameras.main.centerX;
             const cy = this.cameras.main.centerY;
 
-            // --- MESSAGE DE RESET CACHÉ ---
             resetTextOverlay = this.add.text(cx, cy, 'PROTOCOL RESET...', {
                 fontFamily: 'Courier New', fontSize: '24px', color: '#00f2ff', fontWeight: 'bold'
             }).setOrigin(0.5).setDepth(1000).setVisible(false);
@@ -78,48 +85,33 @@
         function setupGame(scene) {
             const cx = scene.cameras.main.centerX;
 
-            // Bouton Reset
-            resetButton = scene.add.container(cx, window.innerHeight - 60).setDepth(500);
+            resetButton = scene.add.container(cx, window.innerHeight - 70).setDepth(500);
             const btnBg = scene.add.graphics();
-            btnBg.fillStyle(0x001a1d, 1).lineStyle(2, 0x00f2ff, 1);
-            btnBg.fillRoundedRect(-80, -22, 160, 44, 5).strokeRoundedRect(-80, -22, 160, 44, 5);
+            btnBg.fillStyle(0x001a1d, 1).lineStyle(3, 0x00f2ff, 1);
+            btnBg.fillRoundedRect(-90, -25, 180, 50, 8).strokeRoundedRect(-90, -25, 180, 50, 8);
             const btnText = scene.add.text(0, 0, 'RÉINITIALISER', {
-                fontFamily: 'Courier New', fontSize: '14px', color: '#00f2ff', fontWeight: 'bold'
+                fontFamily: 'Courier New', fontSize: '16px', color: '#00f2ff', fontWeight: 'bold'
             }).setOrigin(0.5);
             resetButton.add([btnBg, btnText]);
-            resetButton.setSize(160, 44).setInteractive({ useHandCursor: true });
+            resetButton.setSize(180, 50).setInteractive({ useHandCursor: true });
             
-            resetButton.on('pointerdown', () => {
-                triggerInternalReset(scene);
-            });
+            resetButton.on('pointerdown', () => triggerInternalReset(scene));
 
             setupLevel(scene);
         }
 
         function triggerInternalReset(scene) {
-            // Désactiver le bouton pendant le reset
             resetButton.setVisible(false);
-            
-            // Afficher le message clignotant
             resetTextOverlay.setVisible(true);
             scene.tweens.add({
-                targets: resetTextOverlay,
-                alpha: 0,
-                duration: 150,
-                yoyo: true,
-                repeat: 3,
+                targets: resetTextOverlay, alpha: 0, duration: 150, yoyo: true, repeat: 3,
                 onComplete: () => {
                     resetTextOverlay.setVisible(false);
-                    // Nettoyage complet
                     pieces.forEach(p => p.destroy());
                     slots.forEach(s => { if(s.gfx) s.gfx.destroy(); });
-                    slots = [];
-                    pieces = [];
-                    isWon = false;
+                    slots = []; pieces = []; isWon = false;
                     document.getElementById('msg').style.display = 'none';
                     document.getElementById('formula-display').style.display = 'none';
-                    
-                    // Relancer le niveau
                     setupLevel(scene);
                 }
             });
@@ -127,7 +119,9 @@
 
         function setupLevel(scene) {
             const cx = scene.cameras.main.centerX;
-            const cy = scene.cameras.main.centerY - 50;
+            // Le décalage vertical est ajusté pour centrer le bloc de 9 hexagones
+            const cy = scene.cameras.main.centerY - 20; 
+            
             const layout = [
                 {q: 0, r: 0, f: true},    
                 {q: 0, r: 1, f: false}, {q: 0, r: 2, f: true},    
@@ -137,23 +131,29 @@
 
             let mobIdx = 0;
             layout.forEach((pos, i) => {
+                // Formule de centrage horizontal pour le schéma global
                 const px = cx + W_DIST * (pos.q + pos.r/2);
                 const py = cy + H_DIST * pos.r;
+                
                 if (pos.f) {
                     const p = createPiece(scene, px, py, [...LEVEL_DATA[i]], true);
                     p.q = pos.q; p.r = pos.r;
                     pieces.push(p);
                 } else {
                     const s = scene.add.graphics({x: px, y: py});
-                    s.lineStyle(1, 0x00f2ff, 0.1).strokePoints(getHexPts(HEX_SIZE), true);
+                    // Slots plus visibles
+                    s.lineStyle(2, 0x00f2ff, 0.25).strokePoints(getHexPts(HEX_SIZE), true);
                     slots.push({x: px, y: py, q: pos.q, r: pos.r, occupied: false, gfx: s});
-                    const ix = (window.innerWidth / 6) * (mobIdx + 1);
-                    const p = createPiece(scene, ix, window.innerHeight - 170, [...LEVEL_DATA[i]], false);
+                    
+                    const ix = (window.innerWidth / 4) * (mobIdx % 3 + 0.5) + (mobIdx > 2 ? 20 : -20);
+                    const iy = window.innerHeight - (mobIdx > 2 ? 140 : 210);
+                    
+                    const p = createPiece(scene, ix, iy, [...LEVEL_DATA[i]], false);
                     pieces.push(p);
                     mobIdx++;
                 }
             });
-            resetButton.setVisible(true).setY(window.innerHeight - 60);
+            resetButton.setVisible(true).setY(window.innerHeight - 70);
         }
 
         function createPiece(scene, x, y, edges, isFixed) {
@@ -166,7 +166,7 @@
             drawPiece(container, "normal");
 
             if (!isFixed) {
-                container.setInteractive(new Phaser.Geom.Polygon(getHexPts(HEX_SIZE + 10)), Phaser.Geom.Polygon.Contains);
+                container.setInteractive(new Phaser.Geom.Polygon(getHexPts(HEX_SIZE + 15)), Phaser.Geom.Polygon.Contains);
                 scene.input.setDraggable(container);
                 container.on('drag', (pointer, dx, dy) => {
                     if(isWon) return;
@@ -177,7 +177,7 @@
                 });
                 container.on('dragend', () => {
                     slots.forEach(s => {
-                        if (!s.occupied && Phaser.Math.Distance.Between(container.x, container.y, s.x, s.y) < 30) {
+                        if (!s.occupied && Phaser.Math.Distance.Between(container.x, container.y, s.x, s.y) < 40) {
                             container.setPosition(s.x, s.y);
                             container.q = s.q; container.r = s.r;
                             container.currentSlot = s;
@@ -244,14 +244,19 @@
             const edges = container.getData('edges');
             let mainCol = (status === "error") ? 0xff0000 : (status === "success") ? 0x00ff00 : (container.isFixed ? 0xffffff : 0x00f2ff);
             g.clear();
-            g.lineStyle(container.isFixed ? 3 : 2, mainCol, 1).fillStyle(container.isFixed ? 0x1a1a2e : 0x0b0b15, 1);
+            // Lignes plus épaisses pour mobile
+            g.lineStyle(container.isFixed ? 4 : 3, mainCol, 1).fillStyle(container.isFixed ? 0x1a1a2e : 0x0b0b15, 1);
             const pts = getHexPts(HEX_SIZE);
             g.beginPath(); g.moveTo(pts[0].x, pts[0].y);
             pts.forEach(p => g.lineTo(p.x, p.y));
             g.closePath(); g.fillPath(); g.strokePath();
+            
+            // Points de connexion plus gros
             edges.forEach((type, i) => {
                 const angle = (Math.PI / 3 * i); 
-                g.fillStyle(COLORS[type], 1).fillCircle(Math.cos(angle)*(HEX_SIZE*0.78), Math.sin(angle)*(HEX_SIZE*0.78), 5);
+                g.fillStyle(COLORS[type], 1).fillCircle(Math.cos(angle)*(HEX_SIZE*0.78), Math.sin(angle)*(HEX_SIZE*0.78), 6);
+                // Halo lumineux sur les points
+                g.fillStyle(COLORS[type], 0.3).fillCircle(Math.cos(angle)*(HEX_SIZE*0.78), Math.sin(angle)*(HEX_SIZE*0.78), 9);
             });
         }
 
