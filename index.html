@@ -3,20 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bio-Synth : Final Fix</title>
+    <title>Bio-Synth : Final Protocol</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
-        body { margin: 0; background-color: #020205; overflow: hidden; font-family: sans-serif; }
-        #msg { 
-            position: absolute; top: 10%; width: 100%; text-align: center;
-            color: #00ff00; font-size: 1.4rem; text-shadow: 0 0 10px #00ff00;
-            font-weight: bold; opacity: 0; transition: opacity 0.5s; pointer-events: none;
-            z-index: 100;
+        body { margin: 0; background-color: #020205; overflow: hidden; font-family: 'Courier New', monospace; }
+        #ui-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; pointer-events: none; z-index: 100;
         }
+        #msg { 
+            color: #00ff00; font-size: 1.8rem; text-shadow: 0 0 15px #00ff00; 
+            font-weight: bold; display: none; margin-bottom: 20px;
+            background: rgba(0, 255, 0, 0.1); padding: 15px 30px;
+            border: 2px solid #00ff00; border-radius: 8px;
+            text-transform: uppercase; letter-spacing: 3px;
+        }
+        #formula-display {
+            display: none; text-align: center;
+            color: #00f2ff; text-shadow: 0 0 20px #00f2ff;
+        }
+        .molecule { font-size: 3.5rem; font-weight: bold; letter-spacing: 5px; }
+        .sub { vertical-align: sub; font-size: 1.5rem; }
     </style>
 </head>
 <body>
-    <div id="msg">SÉQUENCE VALIDÉE</div>
+    <div id="ui-layer">
+        <div id="msg">SÉQUENCE VALIDÉE</div>
+        <div id="formula-display">
+            <h2>MOLÉCULE SYNTHÉTISÉE :</h2>
+            <div class="molecule">C<span class="sub">8</span>H<span class="sub">10</span>N<span class="sub">4</span>O<span class="sub">2</span></div>
+            <p style="font-size: 0.8rem; margin-top: 20px; color: #fff;">[ STABILITÉ : 100% ]</p>
+        </div>
+    </div>
+
     <script>
         const HEX_SIZE = 34; 
         const COLORS = [null, 0x00f2ff, 0xff00ff, 0x00ff00, 0xffff00, 0xff0000];
@@ -24,35 +44,90 @@
         const H_DIST = HEX_SIZE * 1.5;
         const DIRS = [{q: 1, r: 0}, {q: 0, r: 1}, {q: -1, r: 1}, {q: -1, r: 0}, {q: 0, r: -1}, {q: 1, r: -1}];
 
-        // NIVEAU MANUEL (9 pièces au total : 4 fixes, 5 mobiles)
         const LEVEL_DATA = [
-            [1, 2, 3, 4, 5, 1], // 0: Centre (Fixe)
-            [1, 5, 2, 2, 4, 3], // 1: Mobile 
-            [2, 3, 4, 1, 5, 2], // 2: Terminal Sud (Fixe)
-            [4, 3, 2, 1, 5, 4], // 3: Mobile 
-            [1, 2, 4, 3, 5, 1], // 4: Mobile 
-            [1, 4, 5, 3, 4, 2], // 5: Terminal Ouest (Fixe)
-            [4, 2, 5, 1, 3, 2], // 6: Mobile 
-            [3, 1, 4, 1, 2, 5], // 7: Mobile 
-            [2, 1, 3, 5, 2, 4]  // 8: Terminal Nord-Est (Fixe)
+            [1, 2, 3, 4, 5, 1], [1, 5, 2, 2, 4, 3], [2, 3, 4, 1, 5, 2],
+            [4, 3, 2, 1, 5, 4], [1, 2, 4, 3, 5, 1], [1, 4, 5, 3, 4, 2],
+            [4, 2, 5, 1, 3, 2], [3, 1, 4, 1, 2, 5], [2, 1, 3, 5, 2, 4]
         ];
 
         const config = {
             type: Phaser.AUTO,
-            width: window.innerWidth,
-            height: window.innerHeight,
-            backgroundColor: '#050508',
+            width: window.innerWidth, height: window.innerHeight,
+            backgroundColor: '#020205',
             scene: { create: create }
         };
 
         const game = new Phaser.Game(config);
         let pieces = [];
         let slots = [];
+        let isWon = false;
+        let resetButton, resetTextOverlay;
 
         function create() {
             const cx = this.cameras.main.centerX;
-            const cy = this.cameras.main.centerY - 40;
+            const cy = this.cameras.main.centerY;
 
+            // --- MESSAGE DE RESET CACHÉ ---
+            resetTextOverlay = this.add.text(cx, cy, 'PROTOCOL RESET...', {
+                fontFamily: 'Courier New', fontSize: '24px', color: '#00f2ff', fontWeight: 'bold'
+            }).setOrigin(0.5).setDepth(1000).setVisible(false);
+
+            setupGame(this);
+        }
+
+        function setupGame(scene) {
+            const cx = scene.cameras.main.centerX;
+
+            // Bouton Reset
+            resetButton = scene.add.container(cx, window.innerHeight - 60).setDepth(500);
+            const btnBg = scene.add.graphics();
+            btnBg.fillStyle(0x001a1d, 1).lineStyle(2, 0x00f2ff, 1);
+            btnBg.fillRoundedRect(-80, -22, 160, 44, 5).strokeRoundedRect(-80, -22, 160, 44, 5);
+            const btnText = scene.add.text(0, 0, 'RÉINITIALISER', {
+                fontFamily: 'Courier New', fontSize: '14px', color: '#00f2ff', fontWeight: 'bold'
+            }).setOrigin(0.5);
+            resetButton.add([btnBg, btnText]);
+            resetButton.setSize(160, 44).setInteractive({ useHandCursor: true });
+            
+            resetButton.on('pointerdown', () => {
+                triggerInternalReset(scene);
+            });
+
+            setupLevel(scene);
+        }
+
+        function triggerInternalReset(scene) {
+            // Désactiver le bouton pendant le reset
+            resetButton.setVisible(false);
+            
+            // Afficher le message clignotant
+            resetTextOverlay.setVisible(true);
+            scene.tweens.add({
+                targets: resetTextOverlay,
+                alpha: 0,
+                duration: 150,
+                yoyo: true,
+                repeat: 3,
+                onComplete: () => {
+                    resetTextOverlay.setVisible(false);
+                    // Nettoyage complet
+                    pieces.forEach(p => p.destroy());
+                    slots.forEach(s => { if(s.gfx) s.gfx.destroy(); });
+                    slots = [];
+                    pieces = [];
+                    isWon = false;
+                    document.getElementById('msg').style.display = 'none';
+                    document.getElementById('formula-display').style.display = 'none';
+                    
+                    // Relancer le niveau
+                    setupLevel(scene);
+                }
+            });
+        }
+
+        function setupLevel(scene) {
+            const cx = scene.cameras.main.centerX;
+            const cy = scene.cameras.main.centerY - 50;
             const layout = [
                 {q: 0, r: 0, f: true},    
                 {q: 0, r: 1, f: false}, {q: 0, r: 2, f: true},    
@@ -60,130 +135,123 @@
                 {q: 1, r: -1, f: false}, {q: 2, r: -2, f: false}, {q: 3, r: -3, f: true}   
             ];
 
-            // On sépare les mobiles pour l'inventaire
-            let mobileCount = 0;
-
+            let mobIdx = 0;
             layout.forEach((pos, i) => {
                 const px = cx + W_DIST * (pos.q + pos.r/2);
                 const py = cy + H_DIST * pos.r;
-                
                 if (pos.f) {
-                    const p = createPiece(this, px, py, [...LEVEL_DATA[i]], true);
+                    const p = createPiece(scene, px, py, [...LEVEL_DATA[i]], true);
                     p.q = pos.q; p.r = pos.r;
                     pieces.push(p);
                 } else {
-                    // Création du slot
-                    const s = this.add.graphics({x: px, y: py});
-                    s.lineStyle(1, 0x00f2ff, 0.2).strokePoints(getHexPts(HEX_SIZE), true);
-                    slots.push({x: px, y: py, q: pos.q, r: pos.r, occupied: false});
-
-                    // Calcul position inventaire (5 pièces réparties sur la largeur)
-                    // On utilise mobileCount pour l'espacement
-                    const ix = (window.innerWidth / 6) * (mobileCount + 1);
-                    const iy = window.innerHeight - 80;
-                    
-                    let edges = [...LEVEL_DATA[i]];
-                    const randRot = Math.floor(Math.random() * 6);
-                    for(let r=0; r<randRot; r++) edges.unshift(edges.pop());
-                    
-                    const p = createPiece(this, ix, iy, edges, false);
+                    const s = scene.add.graphics({x: px, y: py});
+                    s.lineStyle(1, 0x00f2ff, 0.1).strokePoints(getHexPts(HEX_SIZE), true);
+                    slots.push({x: px, y: py, q: pos.q, r: pos.r, occupied: false, gfx: s});
+                    const ix = (window.innerWidth / 6) * (mobIdx + 1);
+                    const p = createPiece(scene, ix, window.innerHeight - 170, [...LEVEL_DATA[i]], false);
                     pieces.push(p);
-                    mobileCount++;
+                    mobIdx++;
                 }
             });
-            
-            this.input.on('drag', (pointer, obj, dx, dy) => {
-                obj.setPosition(dx, dy);
-                obj.hasMoved = true;
-                if (obj.currentSlot) { obj.currentSlot.occupied = false; obj.currentSlot = null; obj.q = null; obj.r = null; }
-                refresh(this);
-            });
-
-            this.input.on('dragend', (pointer, obj) => {
-                let found = false;
-                slots.forEach(s => {
-                    if (!s.occupied && Phaser.Math.Distance.Between(obj.x, obj.y, s.x, s.y) < 30) {
-                        obj.setPosition(s.x, s.y);
-                        obj.q = s.q; obj.r = s.r;
-                        obj.currentSlot = s;
-                        s.occupied = true;
-                        found = true;
-                    }
-                });
-                refresh(this);
-            });
+            resetButton.setVisible(true).setY(window.innerHeight - 60);
         }
 
         function createPiece(scene, x, y, edges, isFixed) {
             const container = scene.add.container(x, y);
             container.setData('edges', edges);
             container.isFixed = isFixed;
-            container.hasMoved = false;
+            container.q = null; container.r = null;
             const gfx = scene.add.graphics();
             container.add(gfx);
-
             drawPiece(container, "normal");
 
             if (!isFixed) {
                 container.setInteractive(new Phaser.Geom.Polygon(getHexPts(HEX_SIZE + 10)), Phaser.Geom.Polygon.Contains);
                 scene.input.setDraggable(container);
-                container.on('pointerdown', () => { container.hasMoved = false; container.depth = 10; });
+                container.on('drag', (pointer, dx, dy) => {
+                    if(isWon) return;
+                    container.setPosition(dx, dy);
+                    container.hasMoved = true;
+                    if (container.currentSlot) { container.currentSlot.occupied = false; container.currentSlot = null; }
+                    refresh(scene);
+                });
+                container.on('dragend', () => {
+                    slots.forEach(s => {
+                        if (!s.occupied && Phaser.Math.Distance.Between(container.x, container.y, s.x, s.y) < 30) {
+                            container.setPosition(s.x, s.y);
+                            container.q = s.q; container.r = s.r;
+                            container.currentSlot = s;
+                            s.occupied = true;
+                        }
+                    });
+                    refresh(scene);
+                });
+                container.on('pointerdown', () => { if(!isWon) { container.hasMoved = false; container.depth = 100; } });
                 container.on('pointerup', () => {
-                    container.depth = 1;
-                    if (!container.hasMoved) {
+                    if (!container.hasMoved && !isWon) {
                         let ed = container.getData('edges');
                         ed.unshift(ed.pop());
                         container.setData('edges', ed);
                         refresh(scene);
                     }
+                    container.depth = 1;
                 });
             }
             return container;
         }
 
         function refresh(scene) {
-            const placed = pieces.filter(p => p.q !== null);
             let errors = 0;
-
-            placed.forEach(p1 => {
+            let onGridCount = pieces.filter(p => p.q !== null).length;
+            pieces.forEach(p1 => {
+                if (p1.q === null) { drawPiece(p1, "normal"); return; }
                 let hasErr = false;
                 let connections = 0;
                 DIRS.forEach((dir, i) => {
-                    const p2 = placed.find(p => p.q === p1.q + dir.q && p.r === p1.r + dir.r);
+                    const p2 = pieces.find(p => p.q === p1.q + dir.q && p.r === p1.r + dir.r);
                     if (p2) {
                         connections++;
-                        if (p1.getData('edges')[i] !== p2.getData('edges')[(i+3)%6]) { hasErr = true; errors++; }
+                        if (p1.getData('edges')[i] !== p2.getData('edges')[(i+3)%6]) hasErr = true;
                     }
                 });
-                drawPiece(p1, (connections > 0) ? (hasErr ? "error" : "success") : "normal");
+                if (hasErr) errors++;
+                drawPiece(p1, connections > 0 ? (hasErr ? "error" : "success") : "normal");
             });
-
-            pieces.filter(p => p.q === null).forEach(p => drawPiece(p, "normal"));
-            
-            const allPlaced = pieces.every(p => p.q !== null);
-            document.getElementById('msg').style.opacity = (allPlaced && errors === 0) ? 1 : 0;
+            if (onGridCount === 9 && errors === 0 && !isWon) triggerWin(scene);
         }
 
-        function drawPiece(c, status) {
-            const g = c.list[0];
-            const edges = c.getData('edges');
-            let mainCol = (status === "error") ? 0xff0000 : (status === "success") ? 0x00ff00 : (c.isFixed ? 0xffffff : 0x00f2ff);
-            
+        function triggerWin(scene) {
+            isWon = true;
+            document.getElementById('msg').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('msg').style.display = 'none';
+                resetButton.setVisible(false);
+                scene.cameras.main.fadeOut(800, 0, 0, 0);
+                scene.cameras.main.once('camerafadeoutcomplete', () => {
+                    slots.forEach(s => s.gfx.destroy());
+                    pieces.forEach(p => p.setVisible(false));
+                    document.getElementById('formula-display').style.display = 'block';
+                    scene.cameras.main.fadeIn(800);
+                    setTimeout(() => { 
+                        resetButton.setVisible(true).setY(window.innerHeight - 100); 
+                    }, 1000);
+                });
+            }, 2000);
+        }
+
+        function drawPiece(container, status) {
+            const g = container.list[0];
+            const edges = container.getData('edges');
+            let mainCol = (status === "error") ? 0xff0000 : (status === "success") ? 0x00ff00 : (container.isFixed ? 0xffffff : 0x00f2ff);
             g.clear();
-            g.lineStyle(c.isFixed ? 3 : 1.5, mainCol, 1);
-            g.fillStyle(c.isFixed ? 0x1a1a2e : 0x0b0b15, 1);
+            g.lineStyle(container.isFixed ? 3 : 2, mainCol, 1).fillStyle(container.isFixed ? 0x1a1a2e : 0x0b0b15, 1);
             const pts = getHexPts(HEX_SIZE);
             g.beginPath(); g.moveTo(pts[0].x, pts[0].y);
             pts.forEach(p => g.lineTo(p.x, p.y));
             g.closePath(); g.fillPath(); g.strokePath();
-
             edges.forEach((type, i) => {
                 const angle = (Math.PI / 3 * i); 
-                const d = HEX_SIZE * 0.78;
-                g.fillStyle(COLORS[type], 1);
-                g.fillCircle(Math.cos(angle)*d, Math.sin(angle)*d, 5);
-                g.lineStyle(1, 0xffffff, 0.4);
-                g.strokeCircle(Math.cos(angle)*d, Math.sin(angle)*d, 5);
+                g.fillStyle(COLORS[type], 1).fillCircle(Math.cos(angle)*(HEX_SIZE*0.78), Math.sin(angle)*(HEX_SIZE*0.78), 5);
             });
         }
 
